@@ -1,0 +1,73 @@
+seed: 42
+device: cpu
+
+experiment:
+  name: baseline
+  output_dir: outputs
+  eval_episodes: 20
+
+env:
+  episode_length: 64
+  num_devices: 6
+  num_servers: 2
+  time_weight: 3.0
+  energy_weight: 1.0
+  failure_penalty: 1.5
+  task:
+    avg_load_bits: 1000.0
+    load_std_bits: 120.0
+    avg_cpu_cycle_per_bit: 737.5
+  wireless:
+    gaussian_channel_noise: 1.0
+    effective_capacitance_coefficient: 1.0e-27
+  devices:
+    - priority: 3
+      cpu_frequency: 1.8
+      max_process_delay: 1.0
+      max_load_capacity: 6000.0
+      max_process_load_per_slot: 1500.0
+      energy_consume_per_ms: 1.0
+      transmission_power: 2.0
+      channel_gain: 8.0
+      count: 2
+    - priority: 2
+      cpu_frequency: 1.6
+      max_process_delay: 1.0
+      max_load_capacity: 6000.0
+      max_process_load_per_slot: 1200.0
+      energy_consume_per_ms: 1.0
+      transmission_power: 2.0
+      channel_gain: 8.0
+      count: 2
+    - priority: 1
+      cpu_frequency: 1.4
+      max_process_delay: 1.0
+      max_load_capacity: 6000.0
+      max_process_load_per_slot: 1000.0
+      energy_consume_per_ms: 1.0
+      transmission_power: 2.0
+      channel_gain: 8.0
+      count: 2
+  servers:
+    - bandwidth: 12.0
+      max_cpu_frequency: 9.0
+      count: 2
+
+train:
+  total_updates: 80
+  steps_per_update: 256
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_ratio: 0.2
+  value_coef: 0.5
+  entropy_coef: 0.01
+  learning_rate: 3.0e-4
+  max_grad_norm: 0.5
+  epochs: 4
+  minibatch_size: 64
+
+model:
+  name: gnn
+  hidden_dim: 64
+  gnn_layers: 2
+  dropout: 0.0
