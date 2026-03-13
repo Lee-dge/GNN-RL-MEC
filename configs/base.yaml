@@ -7,6 +7,7 @@ experiment:
   eval_episodes: 20
 
 env:
+  action_type: discrete
   episode_length: 64
   num_devices: 6
   num_servers: 2
@@ -52,6 +53,7 @@ env:
     - bandwidth: 12.0
       max_cpu_frequency: 9.0
       count: 2
+  continuous_target_server_index: 0
 
 train:
   total_updates: 80

@@ -54,7 +54,13 @@ def _write_aggregate(rows: list[dict], output_dir: Path) -> None:
         model = row["model"]
         by_model.setdefault(
             model,
-            {"reward_mean": [], "failure_rate_mean": [], "delay_mean": [], "energy_mean": []},
+            {
+                "reward_mean": [],
+                "failure_rate_mean": [],
+                "delay_mean": [],
+                "energy_mean": [],
+                "offload_ratio_mean": [],
+            },
         )
         for key in by_model[model]:
             by_model[model][key].append(float(row[key]))
@@ -82,6 +88,7 @@ def main() -> None:
     parser.add_argument("--config", type=str, default="configs/base.yaml")
     parser.add_argument("--seeds", type=int, nargs="+", default=[42, 43, 44])
     parser.add_argument("--models", type=str, nargs="+", default=["gnn", "mlp"])
+    parser.add_argument("--action-type", type=str, choices=["discrete", "continuous_ratio", "continuous_mix"], default="discrete")
     parser.add_argument("--eval-episodes", type=int, default=None)
     parser.add_argument("--run-name", type=str, default="baseline")
     parser.add_argument("--total-updates", type=int, default=None)
@@ -101,6 +108,7 @@ def main() -> None:
             cfg = load_config(ROOT / args.config)
             cfg["seed"] = int(seed)
             cfg["model"]["name"] = model_name
+            cfg["env"]["action_type"] = args.action_type
             if args.total_updates is not None:
                 cfg["train"]["total_updates"] = int(args.total_updates)
             if args.steps_per_update is not None:
@@ -117,6 +125,7 @@ def main() -> None:
                 "failure_rate_mean": result["failure_rate_mean"],
                 "delay_mean": result["delay_mean"],
                 "energy_mean": result["energy_mean"],
+                "offload_ratio_mean": result["offload_ratio_mean"],
             }
             eval_rows.append(eval_row)
             run_rows.append(

@@ -7,6 +7,8 @@ __pycache__/
 .venv/
 venv/
 env/
+!src/gnnrl_mec/env/
+!src/gnnrl_mec/env/**
 
 # Tooling caches
 .pytest_cache/

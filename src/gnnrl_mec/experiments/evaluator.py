@@ -24,6 +24,7 @@ def evaluate_policy(cfg: dict, checkpoint_path: Path, episodes: int) -> dict:
     ep_failures = []
     ep_delays = []
     ep_energies = []
+    ep_offload_ratios = []
     for _ in range(episodes):
         obs = env.reset()
         done = False
@@ -31,6 +32,7 @@ def evaluate_policy(cfg: dict, checkpoint_path: Path, episodes: int) -> dict:
         failure_sum = 0
         delay_sum = 0.0
         energy_sum = 0.0
+        offload_ratio_sum = 0.0
         while not done:
             obs = obs.to(device)
             with torch.no_grad():
@@ -40,10 +42,12 @@ def evaluate_policy(cfg: dict, checkpoint_path: Path, episodes: int) -> dict:
             failure_sum += info["failures"]
             delay_sum += info["total_delay"]
             energy_sum += info["total_energy"]
+            offload_ratio_sum += info.get("offload_ratio_mean", 0.0)
         ep_rewards.append(reward_sum)
         ep_failures.append(failure_sum / max(env.episode_length * env.num_devices, 1))
         ep_delays.append(delay_sum / max(env.episode_length, 1))
         ep_energies.append(energy_sum / max(env.episode_length, 1))
+        ep_offload_ratios.append(offload_ratio_sum / max(env.episode_length, 1))
 
     return {
         "episodes": episodes,
@@ -51,12 +55,22 @@ def evaluate_policy(cfg: dict, checkpoint_path: Path, episodes: int) -> dict:
         "failure_rate_mean": float(sum(ep_failures) / max(len(ep_failures), 1)),
         "delay_mean": float(sum(ep_delays) / max(len(ep_delays), 1)),
         "energy_mean": float(sum(ep_energies) / max(len(ep_energies), 1)),
+        "offload_ratio_mean": float(sum(ep_offload_ratios) / max(len(ep_offload_ratios), 1)),
     }
 
 
 def save_evaluation_csv(output_csv: Path, rows: list[dict]) -> None:
     output_csv.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = ["run_name", "model", "seed", "reward_mean", "failure_rate_mean", "delay_mean", "energy_mean"]
+    fieldnames = [
+        "run_name",
+        "model",
+        "seed",
+        "reward_mean",
+        "failure_rate_mean",
+        "delay_mean",
+        "energy_mean",
+        "offload_ratio_mean",
+    ]
     with open(output_csv, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()

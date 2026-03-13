@@ -18,6 +18,7 @@ def main() -> None:
     parser.add_argument("--episodes", type=int, default=None)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--model", type=str, choices=["gnn", "mlp"], default=None)
+    parser.add_argument("--action-type", type=str, choices=["discrete", "continuous_ratio", "continuous_mix"], default=None)
     args = parser.parse_args()
 
     cfg = load_config(ROOT / args.config)
@@ -25,6 +26,8 @@ def main() -> None:
         cfg["seed"] = int(args.seed)
     if args.model is not None:
         cfg["model"]["name"] = args.model
+    if args.action_type is not None:
+        cfg["env"]["action_type"] = args.action_type
     episodes = args.episodes if args.episodes is not None else int(cfg.get("experiment", {}).get("eval_episodes", 20))
     ckpt_path = Path(args.checkpoint)
     result = evaluate_policy(cfg, checkpoint_path=ckpt_path, episodes=episodes)

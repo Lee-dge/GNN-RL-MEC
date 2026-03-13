@@ -100,7 +100,7 @@ def run_training(cfg: dict, project_root: Path, run_name: str | None = None) -> 
                 f"update={update:03d} avg_reward={stats['avg_reward']:.4f} "
                 f"avg_failures={stats['avg_failures']:.4f} "
                 f"avg_delay={stats['avg_delay']:.4f} avg_energy={stats['avg_energy']:.4f} "
-                f"episodes={stats['episodes']}"
+                f"avg_offload={stats['avg_offload_ratio']:.4f} episodes={stats['episodes']}"
             )
 
     checkpoint = {
@@ -113,7 +113,7 @@ def run_training(cfg: dict, project_root: Path, run_name: str | None = None) -> 
     dump_json(output_dir / "train_history.json", {"history": history, "env": env.describe()})
     dump_json(output_dir / "run_config.json", cfg)
     with open(output_dir / "train_metrics.csv", "w", encoding="utf-8", newline="") as f:
-        fieldnames = ["update", "avg_reward", "avg_failures", "avg_delay", "avg_energy", "episodes"]
+        fieldnames = ["update", "avg_reward", "avg_failures", "avg_delay", "avg_energy", "avg_offload_ratio", "episodes"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(history)

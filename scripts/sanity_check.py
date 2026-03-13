@@ -8,21 +8,14 @@ if str(SRC) not in sys.path:
 
 from gnnrl_mec.config import load_config
 from gnnrl_mec.env.mec_env import MECEnv
-from gnnrl_mec.models.policy import GraphPPOPolicy
+from gnnrl_mec.models.factory import build_policy
 
 
 def main() -> None:
     cfg = load_config(ROOT / "configs/base.yaml")
     env = MECEnv(cfg["env"], seed=cfg["seed"])
     obs = env.reset()
-    policy = GraphPPOPolicy(
-        node_dim=obs.x.size(-1),
-        hidden_dim=cfg["model"]["hidden_dim"],
-        num_gnn_layers=cfg["model"]["gnn_layers"],
-        num_actions=env.num_servers + 1,
-        num_devices=env.num_devices,
-        dropout=cfg["model"]["dropout"],
-    )
+    policy = build_policy(cfg, obs=obs, num_devices=env.num_devices, num_servers=env.num_servers)
     action, log_prob, value = policy.act(obs)
     next_obs, reward, done, info = env.step(action.tolist())
     print("nodes:", obs.num_nodes)

@@ -33,6 +33,10 @@ python scripts\sanity_check.py
 python scripts\train.py --config configs\base.yaml
 python scripts\evaluate.py --config configs\base.yaml --checkpoint outputs\<run_dir>\policy.pt
 python scripts\run_baselines.py --config configs\base.yaml --seeds 42 43 44 --models gnn mlp
+python scripts\train.py --config configs\base.yaml --model gnn --action-type continuous_ratio --run-name cont_v1
+python scripts\run_baselines.py --config configs\base.yaml --models gnn mlp --action-type continuous_ratio --seeds 42 43 44 --run-name cont_v1
+python scripts\train.py --config configs\base.yaml --model gnn --action-type continuous_mix --run-name mix_v1
+python scripts\run_baselines.py --config configs\base.yaml --models gnn mlp --action-type continuous_mix --seeds 42 43 44 --run-name mix_v1
 ```
 
 ## Current Baseline
@@ -40,10 +44,26 @@ python scripts\run_baselines.py --config configs\base.yaml --seeds 42 43 44 --mo
 - Environment: stochastic MEC queueing and offloading simulator
 - Graph: bipartite graph between devices and servers
 - Policy: GNN encoder + per-device categorical actor
+- Continuous variant: per-device Beta actor for offloading ratio in [0, 1]
 - Value: pooled graph critic
 - Algorithm: PPO
 - Metrics during train: reward, failures, delay, energy
 - Batch benchmark utility: multi-seed + model comparison + CSV/PNG summary
+
+## Continuous Offloading Mode
+
+Set `env.action_type` to `continuous_ratio` (or pass `--action-type continuous_ratio`).
+
+- Action definition: each device outputs one offloading ratio `alpha in [0,1]`
+- Local load: `(1 - alpha) * current_task_load`
+- Remote load: `alpha * current_task_load`
+- Current implementation sends remote load to `env.continuous_target_server_index` for stable first-stage experiments
+
+Set `env.action_type` to `continuous_mix` for multi-destination allocation.
+
+- Action definition: each device outputs one vector over `[local, server_1, ..., server_M]`
+- The vector is normalized to sum to 1 and represents load split ratios
+- This mode jointly models offloading ratio and server assignment in one action
 
 ## Next Research Steps
 

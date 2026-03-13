@@ -12,6 +12,7 @@ def collect_rollout(env, policy, steps: int, device: torch.device) -> tuple[Roll
     total_failures = 0
     total_delay = 0.0
     total_energy = 0.0
+    total_offload_ratio = 0.0
     episodes = 0
     for _ in range(steps):
         obs = obs.to(device)
@@ -32,6 +33,7 @@ def collect_rollout(env, policy, steps: int, device: torch.device) -> tuple[Roll
         total_failures += info["failures"]
         total_delay += info["total_delay"]
         total_energy += info["total_energy"]
+        total_offload_ratio += info.get("offload_ratio_mean", 0.0)
         obs = env.reset() if done else next_obs
         episodes += int(done)
     stats = {
@@ -39,6 +41,7 @@ def collect_rollout(env, policy, steps: int, device: torch.device) -> tuple[Roll
         "avg_failures": total_failures / max(steps, 1),
         "avg_delay": total_delay / max(steps, 1),
         "avg_energy": total_energy / max(steps, 1),
+        "avg_offload_ratio": total_offload_ratio / max(steps, 1),
         "episodes": episodes,
     }
     return buffer, stats

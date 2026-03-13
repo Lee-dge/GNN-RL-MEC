@@ -16,6 +16,7 @@ def main() -> None:
     parser.add_argument("--config", type=str, default="configs/base.yaml")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--model", type=str, choices=["gnn", "mlp"], default=None)
+    parser.add_argument("--action-type", type=str, choices=["discrete", "continuous_ratio", "continuous_mix"], default=None)
     parser.add_argument("--run-name", type=str, default=None)
     args = parser.parse_args()
     cfg = load_config(ROOT / args.config)
@@ -23,6 +24,8 @@ def main() -> None:
         cfg["seed"] = int(args.seed)
     if args.model is not None:
         cfg["model"]["name"] = args.model
+    if args.action_type is not None:
+        cfg["env"]["action_type"] = args.action_type
     output_dir = run_training(cfg, project_root=ROOT, run_name=args.run_name)
     print(f"run_dir={output_dir}")
 
