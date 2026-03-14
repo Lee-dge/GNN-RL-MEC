@@ -17,6 +17,9 @@ class MECEnv:
         self.config = config
         self.rng = np.random.default_rng(seed)
         self.action_type = str(config.get("action_type", "discrete")).lower()
+        self.max_links_per_device = int(config.get("max_links_per_device", len(config["servers"])))
+        self.server_dynamics = config.get("server_dynamics", {})
+        self.link_dynamics = config.get("link_dynamics", {})
         self.episode_length = int(config["episode_length"])
         self.time_weight = float(config["time_weight"])
         self.energy_weight = float(config["energy_weight"])
@@ -30,6 +33,10 @@ class MECEnv:
         self.continuous_target_server_index = int(config.get("continuous_target_server_index", 0))
         if self.continuous_target_server_index < 0 or self.continuous_target_server_index >= self.num_servers:
             raise ValueError("continuous_target_server_index out of range")
+        self.current_server_bandwidth = np.zeros(self.num_servers, dtype=np.float64)
+        self.current_server_cpu = np.zeros(self.num_servers, dtype=np.float64)
+        self.link_gain_matrix = np.ones((self.num_devices, self.num_servers), dtype=np.float64)
+        self.server_recent_load = np.zeros(self.num_servers, dtype=np.float64)
         self.t = 0
         self.total_failures = 0
         self.devices: list[DeviceState] = []
@@ -69,10 +76,39 @@ class MECEnv:
         self.t = 0
         self.total_failures = 0
         self.devices = [DeviceState(spec=spec) for spec in self.device_specs]
+        self._sample_server_state(init=True)
+        self._sample_link_state(init=True)
         for device in self.devices:
             device.total_task_load = min(self._sample_task_load(), device.spec.max_load_capacity)
             device.current_task_load = min(device.total_task_load, device.spec.max_process_load_per_slot)
         return self._get_observation()
+
+    def _sample_server_state(self, init: bool = False) -> None:
+        enabled = bool(self.server_dynamics.get("enabled", False))
+        bw_jitter = float(self.server_dynamics.get("bandwidth_jitter", 0.0))
+        cpu_jitter = float(self.server_dynamics.get("cpu_jitter", 0.0))
+        for idx, spec in enumerate(self.server_specs):
+            if enabled:
+                bw_scale = max(0.1, 1.0 + self.rng.normal(0.0, bw_jitter))
+                cpu_scale = max(0.1, 1.0 + self.rng.normal(0.0, cpu_jitter))
+            else:
+                bw_scale = 1.0
+                cpu_scale = 1.0
+            self.current_server_bandwidth[idx] = spec.bandwidth * bw_scale
+            self.current_server_cpu[idx] = spec.max_cpu_frequency * cpu_scale
+        if init:
+            self.server_recent_load[:] = 0.0
+
+    def _sample_link_state(self, init: bool = False) -> None:
+        enabled = bool(self.link_dynamics.get("enabled", False))
+        if init or not enabled:
+            low = float(self.link_dynamics.get("init_low", 0.6))
+            high = float(self.link_dynamics.get("init_high", 1.4))
+            self.link_gain_matrix = self.rng.uniform(low, high, size=(self.num_devices, self.num_servers))
+            return
+        noise = float(self.link_dynamics.get("noise_std", 0.08))
+        self.link_gain_matrix += self.rng.normal(0.0, noise, size=self.link_gain_matrix.shape)
+        self.link_gain_matrix = np.clip(self.link_gain_matrix, 0.2, 2.5)
 
     def _sample_task_load(self) -> float:
         load = self.rng.normal(
@@ -100,23 +136,23 @@ class MECEnv:
             if not tasks:
                 continue
             priority_sum = sum(self.devices[idx].spec.priority for idx, _ in tasks)
-            server = self.server_specs[server_idx]
             for device_idx, remote_load in tasks:
                 if remote_load <= 0.0:
                     continue
                 device = self.devices[device_idx]
                 share = device.spec.priority / max(priority_sum, 1e-6)
-                bandwidth = server.bandwidth * share
+                bandwidth = self.current_server_bandwidth[server_idx] * share
+                link_gain = device.spec.channel_gain * self.link_gain_matrix[device_idx][server_idx]
                 upload_rate = bandwidth * 1e6 * math.log2(
                     1.0 + (
                         device.spec.transmission_power
-                        * device.spec.channel_gain
+                        * link_gain
                         / max(bandwidth * channel_noise, 1e-6)
                     )
                 )
                 upload_time = remote_load / max(upload_rate, 1e-6) * 1000.0
                 upload_energy = device.spec.energy_consume_per_ms * upload_time
-                cpu_frequency = server.max_cpu_frequency * share
+                cpu_frequency = self.current_server_cpu[server_idx] * share
                 process_time = remote_load * cpu_cycle_per_bit / max(cpu_frequency, 1e-6) * 1e-9 * 1000.0
                 prev_delay, prev_energy = remote_result.get(device_idx, (0.0, 0.0))
                 remote_result[device_idx] = (max(prev_delay, upload_time + process_time), prev_energy + upload_energy)
@@ -138,6 +174,7 @@ class MECEnv:
                 assignments[server_idx].append((device_idx, self.devices[device_idx].current_task_load))
 
         remote_result = self._remote_process(assignments)
+        self._update_server_recent_load(assignments)
         step_failures = 0
         total_delay = 0.0
         total_energy = 0.0
@@ -194,6 +231,7 @@ class MECEnv:
                 assignments[self.continuous_target_server_index].append((device_idx, remote_load))
 
         remote_result = self._remote_process(assignments)
+        self._update_server_recent_load(assignments)
         step_failures = 0
         total_delay = 0.0
         total_energy = 0.0
@@ -263,6 +301,7 @@ class MECEnv:
                     assignments[server_idx].append((device_idx, remote_load))
 
         remote_result = self._remote_process(assignments)
+        self._update_server_recent_load(assignments)
         step_failures = 0
         total_delay = 0.0
         total_energy = 0.0
@@ -315,6 +354,8 @@ class MECEnv:
         return self._step_discrete(actions)
 
     def _advance_state(self) -> None:
+        self._sample_server_state()
+        self._sample_link_state()
         for device in self.devices:
             new_load = self._sample_task_load()
             remaining = 0.0 if device.finished else device.current_task_load
@@ -325,9 +366,15 @@ class MECEnv:
             device.current_energy = 0.0
             device.finished = True
 
+    def _update_server_recent_load(self, assignments: dict[int, list[tuple[int, float]]]) -> None:
+        for server_idx in range(self.num_servers):
+            total_load = sum(load for _, load in assignments.get(server_idx, []))
+            self.server_recent_load[server_idx] = total_load
+
     def _get_observation(self):
         device_features = []
         for device in self.devices:
+            best_link = float(np.max(self.link_gain_matrix[len(device_features)]))
             device_features.append(
                 [
                     1.0,
@@ -337,11 +384,13 @@ class MECEnv:
                     device.total_task_load / max(device.spec.max_load_capacity, 1.0),
                     device.current_task_load / max(device.spec.max_process_load_per_slot, 1.0),
                     device.spec.max_process_delay,
-                    device.spec.channel_gain / 10.0,
+                    best_link / 2.5,
                 ]
             )
         server_features = []
-        for server in self.server_specs:
+        for server_idx, _server in enumerate(self.server_specs):
+            avg_server_link = float(np.mean(self.link_gain_matrix[:, server_idx]))
+            load_ratio = self.server_recent_load[server_idx] / max(1.0, float(self.task_cfg["avg_load_bits"]) * self.num_devices)
             server_features.append(
                 [
                     0.0,
@@ -349,12 +398,17 @@ class MECEnv:
                     0.0,
                     0.0,
                     0.0,
-                    0.0,
-                    server.bandwidth / 20.0,
-                    server.max_cpu_frequency / 10.0,
+                    load_ratio,
+                    self.current_server_bandwidth[server_idx] / 20.0,
+                    self.current_server_cpu[server_idx] / 10.0,
                 ]
             )
-        return build_bipartite_graph(device_features, server_features)
+        return build_bipartite_graph(
+            device_features,
+            server_features,
+            edge_scores=self.link_gain_matrix.tolist(),
+            max_links_per_device=self.max_links_per_device,
+        )
 
     def describe(self) -> dict[str, Any]:
         return {

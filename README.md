@@ -37,6 +37,7 @@ python scripts\train.py --config configs\base.yaml --model gnn --action-type con
 python scripts\run_baselines.py --config configs\base.yaml --models gnn mlp --action-type continuous_ratio --seeds 42 43 44 --run-name cont_v1
 python scripts\train.py --config configs\base.yaml --model gnn --action-type continuous_mix --run-name mix_v1
 python scripts\run_baselines.py --config configs\base.yaml --models gnn mlp --action-type continuous_mix --seeds 42 43 44 --run-name mix_v1
+python scripts\run_baselines.py --config configs/gnn_advantage.yaml --models gnn mlp --action-type continuous_mix --seeds 40 41 42 43 44 --run-name gnn_adv_v1
 ```
 
 ## Current Baseline
@@ -64,6 +65,12 @@ Set `env.action_type` to `continuous_mix` for multi-destination allocation.
 - Action definition: each device outputs one vector over `[local, server_1, ..., server_M]`
 - The vector is normalized to sum to 1 and represents load split ratios
 - This mode jointly models offloading ratio and server assignment in one action
+
+`configs/gnn_advantage.yaml` adds a harder setting for relational learning:
+
+- dynamic server bandwidth/CPU jitter across time slots
+- dynamic device-server link quality matrix
+- sparse per-device connectivity (`max_links_per_device`)
 
 ## Next Research Steps
 
